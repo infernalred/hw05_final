@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Профиль пользователя{% endblock %}
+{% block content %}
+{% load user_filters %}
+
+<main role="main" class="container">
+    <div class="row">
+
+        {% include "author_card.html" with author=author posts=author.posts %}
+
+        <div class="col-md-9">
+            {% include "post_card.html" with post=post %}
+            {% include "comments.html" with form=form items=comments %}
+        </div>
+
+    </div>
+</main>
+{% endblock %}
