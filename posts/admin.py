@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import Post, Group, Comment
+from .models import Post, Group, Comment, Follow
 
 
 class PostAdmin(admin.ModelAdmin):
@@ -32,3 +32,13 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Comment, CommentAdmin)
+
+
+class FollowAdmin(admin.ModelAdmin):
+    list_display = ("pk", "user", "author")
+    search_fields = ("user",)
+    list_filter = ("user", "author",)
+    empty_value_display = '-пусто-'
+
+
+admin.site.register(Follow, FollowAdmin)

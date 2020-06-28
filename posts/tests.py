@@ -95,10 +95,81 @@ class TestStringMethods(TestCase):
 
     def test_cache(self):
         self.client.get(reverse('index'))
-        post = Post.objects.create(text='new text', group=self.group, author=self.user)
+        post = Post.objects.create(text='new text', group=self.group,
+                                   author=self.user)
         response = self.client.get(reverse('index'))
         self.assertNotContains(response, post.text)
         key = make_template_fragment_key('index_page')
         cache.delete(key)
         response = self.client.get(reverse('index'))
         self.assertContains(response, post.text)
+
+    def test_check_comments(self):
+        post = Post.objects.create(text=self.text, group=self.group,
+                                   author=self.user)
+        resp = self.client.post(reverse("add_comment", kwargs={
+            'username': self.user.username,
+            'post_id': post.id
+        }),
+                                data={
+                                    'text': 'Comment',
+                                    'post': post.id,
+                                    'author': self.user.id
+                                })
+        resp_non_auth = self.non_auth_client.post(reverse("add_comment", kwargs={
+            'username': self.user.username,
+            'post_id': post.id
+        }),
+                                                  data={
+                                                      'text': 'Comment',
+                                                      'post': post.id,
+                                                      'author': self.user.id
+                                                  })
+        self.assertRedirects(resp, reverse("post", kwargs={
+            'username': post.author,
+            'post_id': post.id
+        }))
+        self.assertRedirects(resp_non_auth, "/auth/login/?next=" +
+                             reverse("add_comment", kwargs={
+                                 'username': post.author,
+                                 'post_id': post.id
+                             }))
+
+    def test_check_follow(self):
+        leo = User.objects.create_user(username="leo",
+                                       email="leo@gmail.com",
+                                       password="12345")
+        resp = self.client.post(reverse("profile_follow", kwargs={
+            'username': leo.username,
+        }))
+        self.assertRedirects(resp, reverse("profile",
+                                           kwargs={
+                                               'username': leo.username
+                                           }))
+        self.assertEqual(leo.following.count(), 1)
+        resp = self.client.post(reverse("profile_unfollow", kwargs={
+            'username': leo.username,
+        }))
+        self.assertEqual(leo.following.count(), 0)
+        resp_non_auth = self.non_auth_client.post(reverse("profile_follow", kwargs={
+            'username': leo.username,
+        }))
+        self.assertEqual(leo.following.count(), 0)
+
+    def test_check_follow_posts(self):
+        leo = User.objects.create_user(username="leo",
+                                       email="leo@gmail.com",
+                                       password="12345")
+        mao = User.objects.create_user(username="mao",
+                                       email="mao@gmail.com",
+                                       password="12345")
+        post_leo = Post.objects.create(text="post leo", group=self.group,
+                                       author=leo)
+        post_mao = Post.objects.create(text="post mao", group=self.group,
+                                       author=mao)
+        resp_follow = self.client.post(reverse("profile_follow", kwargs={
+            'username': leo.username,
+        }))
+        resp = self.client.get(reverse("follow_index"))
+        self.check_contain_post(reverse("follow_index"), leo, self.group, "post leo")
+        self.assertNotContains(resp, post_mao.text)

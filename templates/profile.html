@@ -6,7 +6,7 @@
 <main role="main" class="container">
     <div class="row">
 
-        {% include "author_card.html" with author=author posts=author.posts %}
+        {% include "author_card.html" with author=author posts=author.posts is_following=is_following %}
 
         <div class="col-md-9">
 

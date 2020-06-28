@@ -5,13 +5,12 @@
 {% block content %}
 
     <p>{{ group.description }}</p>
+    {% load cache %}
+    {% cache 20 index_page  %}
     {% for post in page %}
-    <h3>
-        Автор: {{ post.author.get_full_name }}, Дата публикации: {{ post.pub_date|date:"d M Y" }}
-    </h3>
-    <p>{{ post.text|linebreaksbr }}</p>
-    <hr>
+      {% include "post_card.html" with post=post %}
     {% endfor %}
+    {% endcache %}
 
     {% if page.has_other_pages %}
     {% include "paginator.html" with items=page paginator=paginator %}
