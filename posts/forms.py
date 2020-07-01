@@ -8,7 +8,8 @@ class PostForm(ModelForm):
         fields = ('group', 'text', 'image')
         labels = {
             'group': 'Группа',
-            'text': 'Текст'
+            'text': 'Текст',
+            'image': 'Изображение'
         }
         help_texts = {
             'group': 'Выберите группу',
@@ -20,3 +21,9 @@ class CommentForm(ModelForm):
     class Meta:
         model = Comment
         fields = ('text',)
+        labels = {
+            'text': 'Текст'
+        }
+        help_texts = {
+            'text': 'Ваш комментарий'
+        }

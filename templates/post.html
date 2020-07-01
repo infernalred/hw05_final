@@ -6,10 +6,10 @@
 <main role="main" class="container">
     <div class="row">
 
-        {% include "author_card.html" with author=author posts=author.posts %}
+        {% include "includes/author_card.html" with author=author posts=author.posts %}
 
         <div class="col-md-9">
-            {% include "post_card.html" with post=post %}
+            {% include "includes/post_card.html" with post=post %}
             {% include "comments.html" with form=form items=comments %}
         </div>
 

@@ -37,11 +37,11 @@ def new_post(request):
             post.author = request.user
             form.save()
             return redirect("index")
-        return render(request, "new_post.html", {'form': form})
+        return render(request, "includes/new_post.html", {'form': form})
 
     form = PostForm()
-    return render(request, "new_post.html", {'form': form,
-                                             'is_edit': False})
+    return render(request, "includes/new_post.html", {'form': form,
+                                                      'is_edit': False})
 
 
 def profile(request, username):
@@ -50,9 +50,8 @@ def profile(request, username):
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
-    is_following = False
-    if request.user.is_authenticated:
-        is_following = request.user.follower.filter(author=user).exists()
+    is_following = request.user.is_authenticated and request. \
+        user.follower.filter(author=user).exists()
     return render(request, "profile.html", {"page": page,
                                             "author": user,
                                             "paginator": paginator,
@@ -64,9 +63,8 @@ def post_view(request, username, post_id):
     post = get_object_or_404(Post.objects.select_related('author'),
                              pk=post_id, author__username=username)
     comments = post.comments.select_related('author')
-    is_following = False
-    if request.user.is_authenticated:
-        is_following = request.user.follower.filter(author=post.author).exists()
+    is_following = request.user.is_authenticated and request. \
+        user.follower.filter(author__username=username).exists()
     return render(request, 'post.html', {"post": post,
                                          "author": post.author,
                                          "form": form,
@@ -85,7 +83,7 @@ def post_edit(request, username, post_id):
         form.save()
         return redirect(reverse("post", kwargs={'username': username, 'post_id': post_id}))
 
-    return render(request, "new_post.html", {'form': form, 'post': post, 'is_edit': True})
+    return render(request, "includes/new_post.html", {'form': form, 'post': post, 'is_edit': True})
 
 
 def page_not_found(request, exception):
@@ -105,21 +103,20 @@ def server_error(request):
 
 @login_required
 def add_comment(request, username, post_id):
-    post = get_object_or_404(Post, pk=post_id)
-    if request.method == 'POST':
-        form = CommentForm(request.POST)
-        if form.is_valid():
-            comment = form.save(commit=False)
-            comment.author = request.user
-            comment.post = post
-            form.save()
+    post = get_object_or_404(Post, pk=post_id, author__username=username)
+    form = CommentForm(request.POST or None)
+    if form.is_valid():
+        comment = form.save(commit=False)
+        comment.author = request.user
+        comment.post = post
+        form.save()
     return redirect(reverse("post", kwargs={
-                'username': username, 'post_id': post_id}))
+        'username': username, 'post_id': post_id}))
 
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.select_related('author').\
+    post_list = Post.objects.select_related('author'). \
         filter(author__following__user=request.user)
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
@@ -132,16 +129,19 @@ def follow_index(request):
 
 @login_required
 def profile_follow(request, username):
-    if username != request.user.username:
-        author = get_object_or_404(User, username=username)
-        follow, created = Follow.objects.get_or_create(user=request.user, author=author)
-        follow.save()
+    author = get_object_or_404(User, username=username)
+    if author == request.user:
+        return redirect(reverse("profile", kwargs={'username': username}))
+
+    follow, created = Follow.objects.get_or_create(user=request.user, author=author)
+    follow.save()
     return redirect(reverse("profile", kwargs={'username': username}))
 
 
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
-    follow, created = Follow.objects.get_or_create(user=request.user, author=author)
-    follow.delete()
+    follow = Follow.objects.get(user=request.user, author=author)
+    if follow:
+        follow.delete()
     return redirect(reverse("profile", kwargs={'username': username}))

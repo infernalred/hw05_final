@@ -1,10 +1,13 @@
+import os
+from os.path import dirname, join
+
 from django.core.cache.utils import make_template_fragment_key
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.cache import cache
-from django.core.files import File
 
-from .models import Post, User, Group
+from .models import Post, User, Group, Comment, Follow
 
 
 class TestStringMethods(TestCase):
@@ -53,45 +56,73 @@ class TestStringMethods(TestCase):
         self.assertEqual(post.text, text)
         self.assertEqual(post.group, group)
         self.assertEqual(post.author, user)
-        # self.assertContains(resp, "img")
+        self.assertTrue(post.image)
 
     def test_check_post(self):
         post = Post.objects.create(text=self.text, group=self.group, author=self.user)
-        with open('posts/7-3.jpg', 'rb') as img:
-            self.client.post(reverse("post_edit", kwargs={'username': self.user.username, 'post_id': post.id}),
-                             data={'group': self.group.id, 'text': self.text, 'image': img}, follow=True)
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        img = SimpleUploadedFile('small.gif', small_gif,
+                                 content_type='image/gif')
+        self.client.post(reverse("post_edit", kwargs={
+            'username': self.user.username,
+            'post_id': post.id}),
+                         data={
+                             'group': self.group.id,
+                             'text': self.text,
+                             'image': img
+                         }, follow=True)
         list_urls = [
             reverse('index'),
             reverse('profile', kwargs={'username': self.user.username}),
             reverse('post', kwargs={'username': self.user.username, 'post_id': post.id})
         ]
         for url in list_urls:
-            self.check_contain_post(url, self.user, self.group, self.text)
+            with self.subTest(url=url):
+                self.check_contain_post(url, self.user, self.group, self.text)
+
+    def test_check_not_image_file(self):
+        post = Post.objects.create(text=self.text, group=self.group, author=self.user)
+        img = SimpleUploadedFile('file.txt', b'i-am-a-text-file')
+        resp = self.client.post(reverse("post_edit", kwargs={
+            'username': self.user.username,
+            'post_id': post.id}),
+                                data={
+                                    'group': self.group.id,
+                                    'text': self.text,
+                                    'image': img
+                                }, forward=True)
+        self.assertFormError(resp, 'form', 'image', 'Загрузите правильное изображение. Файл, который вы загрузили, '
+                                                    'поврежден или не является изображением.')
 
     def test_check_edit(self):
         post = Post.objects.create(text=self.text, group=self.group, author=self.user)
         group = Group.objects.create(title="chim", slug="chim", description="chim kim")
         new_text = "Chim bir fir"
-        with open('posts/7-3.jpg', 'rb') as img:
-            self.client.post(reverse("post_edit", kwargs={'username': self.user.username, 'post_id': post.id}),
-                             data={'group': group.id, 'text': new_text, 'image': img}, follow=True)
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        img = SimpleUploadedFile('small.gif', small_gif,
+                                 content_type='image/gif')
+        self.client.post(reverse("post_edit", kwargs={'username': self.user.username, 'post_id': post.id}),
+                         data={'group': group.id, 'text': new_text, 'image': img}, follow=True)
         list_urls = [
             reverse('index'),
             reverse('profile', kwargs={'username': self.user.username}),
             reverse('post', kwargs={'username': self.user.username, 'post_id': post.id})
         ]
         for url in list_urls:
-            self.check_contain_post(url, self.user, group, new_text)
+            with self.subTest(url=url):
+                self.check_contain_post(url, self.user, group, new_text)
         resp_post = self.client.get(reverse('post', kwargs={'username': self.user.username,
                                                             'post_id': post.id}))
         resp_group = self.client.get(reverse('groups', kwargs={'slug': self.group.slug}))
-        self.assertNotContains(resp_post, self.text)
         self.assertEqual(resp_group.context['paginator'].count, 0)
-        with open('posts/admin.py', 'rb') as img:
-            resp_no_image = self.client.post(
-                reverse("post_edit", kwargs={'username': self.user.username, 'post_id': post.id}),
-                data={'group': group.id, 'text': new_text, 'image': img})
-        self.assertNotEqual(resp_no_image.status_code, 302)
 
     def test_cache(self):
         self.client.get(reverse('index'))
@@ -107,33 +138,29 @@ class TestStringMethods(TestCase):
     def test_check_comments(self):
         post = Post.objects.create(text=self.text, group=self.group,
                                    author=self.user)
-        resp = self.client.post(reverse("add_comment", kwargs={
+        self.client.post(reverse("add_comment", kwargs={
             'username': self.user.username,
             'post_id': post.id
-        }),
-                                data={
-                                    'text': 'Comment',
-                                    'post': post.id,
-                                    'author': self.user.id
-                                })
-        resp_non_auth = self.non_auth_client.post(reverse("add_comment", kwargs={
+        }), data={
+            'text': 'Comment',
+            'post': post.id,
+            'author': self.user.id})
+        comment = post.comments.select_related('author').first()
+        self.assertEqual(comment.text, 'Comment')
+        self.assertEqual(comment.post, post)
+        self.assertEqual(comment.author, self.user)
+
+    def test_check_non_auth_comments(self):
+        post = Post.objects.create(text=self.text, group=self.group,
+                                   author=self.user)
+        self.non_auth_client.post(reverse("add_comment", kwargs={
             'username': self.user.username,
             'post_id': post.id
-        }),
-                                                  data={
-                                                      'text': 'Comment',
-                                                      'post': post.id,
-                                                      'author': self.user.id
-                                                  })
-        self.assertRedirects(resp, reverse("post", kwargs={
-            'username': post.author,
-            'post_id': post.id
-        }))
-        self.assertRedirects(resp_non_auth, "/auth/login/?next=" +
-                             reverse("add_comment", kwargs={
-                                 'username': post.author,
-                                 'post_id': post.id
-                             }))
+        }), data={
+            'text': 'Comment',
+            'post': post.id,
+            'author': self.user.id})
+        self.assertEqual(Comment.objects.count(), 0)
 
     def test_check_follow(self):
         leo = User.objects.create_user(username="leo",
@@ -147,16 +174,37 @@ class TestStringMethods(TestCase):
                                                'username': leo.username
                                            }))
         self.assertEqual(leo.following.count(), 1)
-        resp = self.client.post(reverse("profile_unfollow", kwargs={
+        follow = Follow.objects.all().first()
+        self.assertEqual(follow.author, leo)
+        self.assertEqual(follow.user, self.user)
+        self.client.post(reverse("profile_unfollow", kwargs={
             'username': leo.username,
         }))
-        self.assertEqual(leo.following.count(), 0)
         resp_non_auth = self.non_auth_client.post(reverse("profile_follow", kwargs={
             'username': leo.username,
         }))
         self.assertEqual(leo.following.count(), 0)
 
+    def test_check_unfollow(self):
+        leo = User.objects.create_user(username="leo",
+                                       email="leo@gmail.com",
+                                       password="12345")
+        self.client.post(reverse("profile_follow", kwargs={
+            'username': leo.username,
+        }))
+        self.client.post(reverse("profile_unfollow", kwargs={
+            'username': leo.username,
+        }))
+        self.assertEqual(leo.following.count(), 0)
+
     def test_check_follow_posts(self):
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        img = SimpleUploadedFile('small.gif', small_gif,
+                                 content_type='image/gif')
         leo = User.objects.create_user(username="leo",
                                        email="leo@gmail.com",
                                        password="12345")
@@ -164,9 +212,9 @@ class TestStringMethods(TestCase):
                                        email="mao@gmail.com",
                                        password="12345")
         post_leo = Post.objects.create(text="post leo", group=self.group,
-                                       author=leo)
+                                       author=leo, image=img)
         post_mao = Post.objects.create(text="post mao", group=self.group,
-                                       author=mao)
+                                       author=mao, image=img)
         resp_follow = self.client.post(reverse("profile_follow", kwargs={
             'username': leo.username,
         }))

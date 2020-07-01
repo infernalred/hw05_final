@@ -8,12 +8,12 @@
     {% load cache %}
     {% cache 20 index_page  %}
     {% for post in page %}
-      {% include "post_card.html" with post=post %}
+      {% include "includes/post_card.html" with post=post %}
     {% endfor %}
     {% endcache %}
 
     {% if page.has_other_pages %}
-    {% include "paginator.html" with items=page paginator=paginator %}
+    {% include "includes/paginator.html" with items=page paginator=paginator %}
     {% endif %}
 
 {% endblock %}

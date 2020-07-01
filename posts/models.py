@@ -12,11 +12,15 @@ class Group(models.Model):
 
 class Post(models.Model):
     text = models.TextField()
-    pub_date = models.DateTimeField("date published", auto_now_add=True)
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
+    pub_date = models.DateTimeField("date published",
+                                    auto_now_add=True)
+    author = models.ForeignKey(User, on_delete=models.CASCADE,
+                               related_name="posts")
     group = models.ForeignKey(Group, blank=True, null=True,
-                              on_delete=models.SET_NULL, related_name="posts")
-    image = models.ImageField(upload_to='posts/', blank=True, null=True)
+                              on_delete=models.SET_NULL,
+                              related_name="posts")
+    image = models.ImageField(upload_to='posts/',
+                              blank=True, null=True)
 
     class Meta:
         ordering = ['-pub_date']
@@ -24,11 +28,19 @@ class Post(models.Model):
 
 class Comment(models.Model):
     text = models.TextField()
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comments")
-    created = models.DateTimeField("date published", auto_now_add=True)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE,
+                             related_name="comments")
+    author = models.ForeignKey(User, on_delete=models.CASCADE,
+                               related_name="comments")
+    created = models.DateTimeField("date published",
+                                   auto_now_add=True)
 
 
 class Follow(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="follower")
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
+    user = models.ForeignKey(User, on_delete=models.CASCADE,
+                             related_name="follower")
+    author = models.ForeignKey(User, on_delete=models.CASCADE,
+                               related_name="following")
+
+    class Meta:
+        unique_together = ("user", "author")
