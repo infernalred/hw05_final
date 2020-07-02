@@ -10,7 +10,7 @@
 
         <div class="col-md-9">
             {% include "includes/post_card.html" with post=post %}
-            {% include "comments.html" with form=form items=comments %}
+            {% include "comments.html" with form=form items=post.comments.select_related %}
         </div>
 
     </div>

@@ -1,9 +1,6 @@
-import os
-from os.path import dirname, join
-
 from django.core.cache.utils import make_template_fragment_key
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from django.core.cache import cache
 
@@ -45,6 +42,7 @@ class TestStringMethods(TestCase):
         self.assertRedirects(resp, "/auth/login/?next=/new/")
         self.assertEqual(Post.objects.count(), 0)
 
+    @override_settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def check_contain_post(self, url, user, group, text):
         resp = self.client.get(url)
         post = None
@@ -57,6 +55,7 @@ class TestStringMethods(TestCase):
         self.assertEqual(post.group, group)
         self.assertEqual(post.author, user)
         self.assertTrue(post.image)
+        self.assertContains(resp, '<img')
 
     def test_check_post(self):
         post = Post.objects.create(text=self.text, group=self.group, author=self.user)
@@ -78,7 +77,8 @@ class TestStringMethods(TestCase):
         list_urls = [
             reverse('index'),
             reverse('profile', kwargs={'username': self.user.username}),
-            reverse('post', kwargs={'username': self.user.username, 'post_id': post.id})
+            reverse('post', kwargs={'username': self.user.username, 'post_id': post.id}),
+            reverse('groups', kwargs={'slug': self.group.slug}),
         ]
         for url in list_urls:
             with self.subTest(url=url):
@@ -119,10 +119,8 @@ class TestStringMethods(TestCase):
         for url in list_urls:
             with self.subTest(url=url):
                 self.check_contain_post(url, self.user, group, new_text)
-        resp_post = self.client.get(reverse('post', kwargs={'username': self.user.username,
-                                                            'post_id': post.id}))
-        resp_group = self.client.get(reverse('groups', kwargs={'slug': self.group.slug}))
-        self.assertEqual(resp_group.context['paginator'].count, 0)
+        self.client.get(reverse('post', kwargs={'username': self.user.username,
+                                                'post_id': post.id}))
 
     def test_cache(self):
         self.client.get(reverse('index'))
@@ -146,6 +144,7 @@ class TestStringMethods(TestCase):
             'post': post.id,
             'author': self.user.id})
         comment = post.comments.select_related('author').first()
+        self.assertEqual(Comment.objects.count(), 1)
         self.assertEqual(comment.text, 'Comment')
         self.assertEqual(comment.post, post)
         self.assertEqual(comment.author, self.user)
@@ -166,21 +165,22 @@ class TestStringMethods(TestCase):
         leo = User.objects.create_user(username="leo",
                                        email="leo@gmail.com",
                                        password="12345")
-        resp = self.client.post(reverse("profile_follow", kwargs={
+        self.client.post(reverse("profile_follow", kwargs={
             'username': leo.username,
         }))
-        self.assertRedirects(resp, reverse("profile",
-                                           kwargs={
-                                               'username': leo.username
-                                           }))
-        self.assertEqual(leo.following.count(), 1)
-        follow = Follow.objects.all().first()
+        self.assertEqual(Follow.objects.count(), 1)
+        follow = Follow.objects.first()
         self.assertEqual(follow.author, leo)
         self.assertEqual(follow.user, self.user)
         self.client.post(reverse("profile_unfollow", kwargs={
             'username': leo.username,
         }))
-        resp_non_auth = self.non_auth_client.post(reverse("profile_follow", kwargs={
+
+    def test_check_follow_non_auth(self):
+        leo = User.objects.create_user(username="leo",
+                                       email="leo@gmail.com",
+                                       password="12345")
+        self.non_auth_client.post(reverse("profile_follow", kwargs={
             'username': leo.username,
         }))
         self.assertEqual(leo.following.count(), 0)
@@ -189,9 +189,7 @@ class TestStringMethods(TestCase):
         leo = User.objects.create_user(username="leo",
                                        email="leo@gmail.com",
                                        password="12345")
-        self.client.post(reverse("profile_follow", kwargs={
-            'username': leo.username,
-        }))
+        Follow.objects.create(user=self.user, author=leo)
         self.client.post(reverse("profile_unfollow", kwargs={
             'username': leo.username,
         }))
@@ -208,16 +206,25 @@ class TestStringMethods(TestCase):
         leo = User.objects.create_user(username="leo",
                                        email="leo@gmail.com",
                                        password="12345")
+        Post.objects.create(text="post leo", group=self.group,
+                            author=leo, image=img)
+        self.client.post(reverse("profile_follow", kwargs={
+            'username': leo.username,
+        }))
+        self.check_contain_post(reverse("follow_index"), leo, self.group, "post leo")
+
+    def test_check_non_follow_posts(self):
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        img = SimpleUploadedFile('small.gif', small_gif,
+                                 content_type='image/gif')
         mao = User.objects.create_user(username="mao",
                                        email="mao@gmail.com",
                                        password="12345")
-        post_leo = Post.objects.create(text="post leo", group=self.group,
-                                       author=leo, image=img)
         post_mao = Post.objects.create(text="post mao", group=self.group,
                                        author=mao, image=img)
-        resp_follow = self.client.post(reverse("profile_follow", kwargs={
-            'username': leo.username,
-        }))
         resp = self.client.get(reverse("follow_index"))
-        self.check_contain_post(reverse("follow_index"), leo, self.group, "post leo")
         self.assertNotContains(resp, post_mao.text)
