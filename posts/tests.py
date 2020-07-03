@@ -6,6 +6,12 @@ from django.core.cache import cache
 
 from .models import Post, User, Group, Comment, Follow
 
+POST_CACHE = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.dummy.DummyCache'
+    }
+}
+
 
 class TestStringMethods(TestCase):
 
@@ -42,13 +48,13 @@ class TestStringMethods(TestCase):
         self.assertRedirects(resp, "/auth/login/?next=/new/")
         self.assertEqual(Post.objects.count(), 0)
 
-    @override_settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
+    @override_settings(CACHES=POST_CACHE)
     def check_contain_post(self, url, user, group, text):
         resp = self.client.get(url)
         post = None
         if 'paginator' in resp.context:
-            if resp.context['paginator'].count == 1:
-                post = resp.context['page'][0]
+            self.assertEqual(resp.context['paginator'].count, 1)
+            post = resp.context['page'][0]
         else:
             post = resp.context['post']
         self.assertEqual(post.text, text)
@@ -119,8 +125,8 @@ class TestStringMethods(TestCase):
         for url in list_urls:
             with self.subTest(url=url):
                 self.check_contain_post(url, self.user, group, new_text)
-        self.client.get(reverse('post', kwargs={'username': self.user.username,
-                                                'post_id': post.id}))
+        resp = self.client.get(reverse('groups', kwargs={'slug': self.group.slug}))
+        self.assertEqual(resp.context['paginator'].count, 0)
 
     def test_cache(self):
         self.client.get(reverse('index'))
@@ -172,9 +178,6 @@ class TestStringMethods(TestCase):
         follow = Follow.objects.first()
         self.assertEqual(follow.author, leo)
         self.assertEqual(follow.user, self.user)
-        self.client.post(reverse("profile_unfollow", kwargs={
-            'username': leo.username,
-        }))
 
     def test_check_follow_non_auth(self):
         leo = User.objects.create_user(username="leo",

@@ -62,12 +62,9 @@ def post_view(request, username, post_id):
     form = CommentForm()
     post = get_object_or_404(Post.objects.select_related('author'),
                              pk=post_id, author__username=username)
-    is_following = request.user.is_authenticated and request. \
-        user.follower.filter(author__username=username).exists()
     return render(request, 'post.html', {"post": post,
                                          "author": post.author,
-                                         "form": form,
-                                         "is_following": is_following})
+                                         "form": form})
 
 
 @login_required
@@ -129,7 +126,7 @@ def profile_follow(request, username):
     if author == request.user or Follow.objects.filter(user=request.user, author=author).exists():
         return redirect(reverse("profile", kwargs={'username': username}))
 
-    follow, created = Follow.objects.get_or_create(user=request.user, author=author)
+    follow = Follow.objects.create(user=request.user, author=author)
     follow.save()
     return redirect(reverse("profile", kwargs={'username': username}))
 
@@ -137,7 +134,7 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
+    follow = Follow.objects.filter(user=request.user, author=author)
     if Follow.objects.filter(user=request.user, author=author).exists():
-        follow = Follow.objects.get(user=request.user, author=author)
         follow.delete()
     return redirect(reverse("profile", kwargs={'username': username}))
