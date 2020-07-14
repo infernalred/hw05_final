@@ -9,13 +9,13 @@
             <div class="card-header">Новый пост</div>
             <div class="card-body">
 
-                {% if form.errors %}
-                    {% for error in form.errors %}
+                 {% for field, errors in form.errors.items %}
+                    {% for error in errors %}
                         <div class="alert alert-danger" role="alert">
-                            {{ error|escape }}
+                            {{ field }}: {{ error }}
                         </div>
                     {% endfor %}
-                {% endif %}
+                {% endfor %}
 
                 <form method="post" enctype="multipart/form-data" action="{% if is_edit %}{% url 'post_edit' user.username post.pk %}{% else %}{% url 'new_post' %}{% endif %}">
                     {% csrf_token %}
